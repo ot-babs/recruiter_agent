@@ -1,4 +1,4 @@
-import openai
+from langchain_openai import OpenAIEmbeddings
 
 def chunk_cv(cv_dict, chunk_size=500):
     """
@@ -22,13 +22,13 @@ def embed_cv(chunks, api_key):
     """
     Given a list of text chunks, returns their OpenAI embeddings.
     """
-    openai.api_key = api_key
+    embeddings_model = OpenAIEmbeddings(
+        openai_api_key=api_key,
+        model="text-embedding-ada-002"
+    )
+    
     embeddings = []
     for chunk in chunks:
-        response = openai.embeddings.create(
-            input=chunk,
-            model="text-embedding-ada-002"
-        )
-        vector = response.data[0].embedding
+        vector = embeddings_model.embed_query(chunk)
         embeddings.append({"text": chunk, "embedding": vector})
     return embeddings

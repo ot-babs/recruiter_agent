@@ -1,21 +1,30 @@
-
+from langchain_openai import ChatOpenAI
+from langchain.schema import SystemMessage, HumanMessage
 import json
+from config import settings
 
-def structure_cv(cv_text, api_key=None, model="gpt-3.5-turbo"):
+def structure_cv(cv_text, api_key=None, model="gpt-4.1-mini"):
     """
     Parse the CV into sections using either OpenAI LLM (if api_key) or fallback regex method.
     Returns a dict: {section: content}
     """
-    if api_key:
-        structured = structure_with_llm(cv_text, api_key, model)
+    if api_key or settings.OPENAI_API_KEY:
+        structured = structure_with_llm(cv_text, api_key or settings.OPENAI_API_KEY, model)
     return structured
 
 def structure_with_llm(cv_text, api_key, model):
-    import openai
-    import json
-    openai.api_key = api_key
+    """
+    Structure CV using LangChain ChatOpenAI
+    """
+    llm = ChatOpenAI(
+        openai_api_key=api_key,
+        model=model,
+        temperature=0
+    )
 
-    prompt = f"""
+    system_prompt = "You are a helpful assistant that extracts structured information from CVs in any format."
+    
+    user_prompt = f"""
 You are an expert CV information extractor. Given ANY CV text—regardless of format, order, or section headings—extract and return a JSON object with these standardized keys:
 
 - professional_summary
@@ -37,14 +46,17 @@ CV TEXT:
 -----
 """
 
-    response = openai.chat.completions.create(
-        model=model,
-        messages=[{"role": "system", "content": "You are a helpful assistant that extracts structured information from CVs in any format."},
-                  {"role": "user", "content": prompt}],
-        temperature=0
-    )
-    text_response = response.choices[0].message.content.strip()
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt)
+    ]
+    
     try:
+        # Use invoke instead of __call__ to fix deprecation warning
+        response = llm.invoke(messages)
+        text_response = response.content.strip()
         return json.loads(text_response)
-    except Exception:
+    except json.JSONDecodeError:
         return {"llm_raw": text_response}
+    except Exception as e:
+        return {"error": str(e)}

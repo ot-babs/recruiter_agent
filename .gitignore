@@ -1,0 +1,6 @@
+.env
+matching_engine/__pycache__
+cv_parser/__pycache__
+job_scraper/__pycache__
+.DS_Store
+__pycache__

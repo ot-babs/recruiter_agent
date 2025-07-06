@@ -1,2 +1,10 @@
-openai==
+openai
 python-dotenv
+playwright
+openai
+crawl4ai
+streamlit
+pymupdf
+langchain
+langchain_openai
+linkedin-jobs-scraper
