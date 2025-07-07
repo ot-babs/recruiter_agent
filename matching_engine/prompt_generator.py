@@ -47,9 +47,9 @@ Cover Letter:
     except Exception as e:
         return f"Error generating cover letter: {str(e)}"
 
-def generate_message(cv_dict: dict, job_dict: dict, company_context: str = "", tone: str = "concise", model: str = "gpt-4o-mini") -> str:
+def generate_message(cv_dict: dict, job_dict: dict, company_context: str = "", recruiter_context: str = "", tone: str = "concise", model: str = "gpt-4o-mini") -> str:
     """
-    Generate a recruiter outreach message with optional company context.
+    Generate a recruiter outreach message with optional company and recruiter context.
     Uses OpenAI API key from config.py
     """
     llm = ChatOpenAI(
@@ -58,7 +58,7 @@ def generate_message(cv_dict: dict, job_dict: dict, company_context: str = "", t
         temperature=0.7
     )
 
-    system_prompt = "You write personalized, compelling recruiter outreach messages that grab attention and demonstrate clear value proposition."
+    system_prompt = "You write personalized, compelling recruiter outreach messages that grab attention and demonstrate clear value proposition. You excel at personalizing messages based on the recruiter's background and interests."
     
     # Build company context section
     company_section = ""
@@ -66,6 +66,14 @@ def generate_message(cv_dict: dict, job_dict: dict, company_context: str = "", t
         company_section = f"""
 COMPANY CONTEXT:
 {company_context[:800]}  # Limit to avoid token overflow
+"""
+
+    # Build recruiter context section
+    recruiter_section = ""
+    if recruiter_context and recruiter_context.strip():
+        recruiter_section = f"""
+RECRUITER PROFILE:
+{recruiter_context[:800]}  # Limit to avoid token overflow
 """
 
     user_prompt = f"""
@@ -79,17 +87,26 @@ Experience: {cv_dict.get('experience', [])}
 JOB POSITION:
 {job_dict}
 {company_section}
+{recruiter_section}
 
 REQUIREMENTS:
 - Tone: {tone}
 - Length: 150-200 words (LinkedIn message length)
-- Start with a personalized greeting referencing specific role
-- Highlight 2-3 key strengths that directly match job requirements
-- Use specific examples or achievements from their background
-- Show knowledge of the company (if company context provided)
+- Start with a personalized greeting addressing the recruiter by name if available
+- Reference specific aspects of the recruiter's background, specializations, or interests when possible
+- Highlight 2-3 key strengths that directly match both job requirements AND the recruiter's focus areas
+- Use specific examples or achievements from the candidate's background
+- Show knowledge of the company and recruiter's work (if context provided)
 - Include clear call-to-action
 - Be conversational yet professional
 - Focus on value proposition - what they bring to the role
+- Make it feel like a genuine, researched outreach rather than a generic template
+
+PERSONALIZATION GUIDELINES:
+- If recruiter specializes in certain areas, connect candidate's experience to those areas
+- If recruiter has specific industry focus, emphasize relevant industry experience
+- Reference recruiter's current company or position when relevant
+- Use a tone that matches the recruiter's professional style (if determinable from profile)
 
 Message:
 """
@@ -105,7 +122,7 @@ Message:
     except Exception as e:
         return f"Error generating message: {str(e)}"
 
-def generate_custom_prompt(cv_dict: dict, job_dict: dict, custom_request: str, company_context: str = "", model: str = "gpt-4o-mini") -> str:
+def generate_custom_prompt(cv_dict: dict, job_dict: dict, custom_request: str, company_context: str = "", recruiter_context: str = "", model: str = "gpt-4o-mini") -> str:
     """
     Generate content based on custom user request.
     Flexible function for any custom prompts related to job applications.
@@ -126,6 +143,14 @@ COMPANY CONTEXT:
 {company_context[:800]}
 """
 
+    # Build recruiter context section
+    recruiter_section = ""
+    if recruiter_context and recruiter_context.strip():
+        recruiter_section = f"""
+RECRUITER PROFILE:
+{recruiter_context[:800]}
+"""
+
     user_prompt = f"""
 CANDIDATE PROFILE:
 {cv_dict}
@@ -133,11 +158,12 @@ CANDIDATE PROFILE:
 JOB POSITION:
 {job_dict}
 {company_section}
+{recruiter_section}
 
 CUSTOM REQUEST:
 {custom_request}
 
-Please fulfill the custom request using the candidate and job information provided:
+Please fulfill the custom request using the candidate, job, company, and recruiter information provided:
 """
 
     messages = [

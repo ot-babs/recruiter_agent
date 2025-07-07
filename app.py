@@ -10,6 +10,7 @@ from cv_parser.cv_embedder import chunk_cv, embed_cv
 from job_scraper.linkedin_scraper import fetch_linkedin_job_sync
 from job_scraper.job_parser import parse_job_description
 from job_scraper.recruiter_scraper import fetch_recruiter_info_sync, format_company_info_as_markdown  # Add the recruiter scraper
+from job_scraper.recruiter_profile_scraper import fetch_recruiter_profile_sync, format_recruiter_profile_as_markdown  # Add recruiter profile scraper
 from matching_engine.matcher import match_cv_to_job
 from matching_engine.prompt_generator import generate_cover_letter, generate_message
 
@@ -27,6 +28,8 @@ if 'job_struct' not in st.session_state:
     st.session_state.job_struct = None
 if 'company_info' not in st.session_state:
     st.session_state.company_info = None
+if 'recruiter_profile' not in st.session_state:
+    st.session_state.recruiter_profile = None
 if 'match_results' not in st.session_state:
     st.session_state.match_results = None
 if 'cover_letter' not in st.session_state:
@@ -37,16 +40,21 @@ if 'job_manual_required' not in st.session_state:
     st.session_state.job_manual_required = False
 if 'company_manual_required' not in st.session_state:
     st.session_state.company_manual_required = False
+if 'recruiter_manual_required' not in st.session_state:
+    st.session_state.recruiter_manual_required = False
 if 'manual_job_text' not in st.session_state:
     st.session_state.manual_job_text = None
 if 'manual_company_text' not in st.session_state:
     st.session_state.manual_company_text = None
+if 'manual_recruiter_text' not in st.session_state:
+    st.session_state.manual_recruiter_text = None
 
 with st.sidebar:
     st.header("Upload & Input")
     cv_file = st.file_uploader("Upload your CV (PDF, .tex, .docx)", type=["pdf", "tex", "docx"])
     job_url = st.text_input("LinkedIn job URL")
     company_url = st.text_input("Company LinkedIn URL (optional)", help="For additional company context")
+    recruiter_url = st.text_input("Recruiter LinkedIn Profile URL (optional)", help="For personalized recruiter messages")
     
     # Manual input sections (shown when scraping fails)
     if st.session_state.get('job_manual_required', False):
@@ -65,6 +73,15 @@ with st.sidebar:
             if manual_company_text.strip():
                 st.session_state.manual_company_text = manual_company_text
                 st.session_state.company_manual_required = False
+                st.rerun()
+    
+    if st.session_state.get('recruiter_manual_required', False):
+        st.warning("⚠️ Recruiter profile scraping failed. Please paste recruiter information manually:")
+        manual_recruiter_text = st.text_area("Recruiter Profile Information", height=150, key="manual_recruiter_input")
+        if st.button("Parse Recruiter Profile"):
+            if manual_recruiter_text.strip():
+                st.session_state.manual_recruiter_text = manual_recruiter_text
+                st.session_state.recruiter_manual_required = False
                 st.rerun()
 
     run_button = st.button("Analyze")
@@ -112,6 +129,21 @@ if run_button:
                 else:
                     st.session_state.company_info = company_raw
 
+        # Recruiter profile scraping (if URL provided)
+        if recruiter_url:
+            with st.spinner("Scraping recruiter profile..."):
+                manual_recruiter_text = st.session_state.get('manual_recruiter_text', None)
+                recruiter_raw = fetch_recruiter_profile_sync(recruiter_url, manual_recruiter_text)
+                
+                # Handle manual input requirement
+                if recruiter_raw.get('error') == 'MANUAL_INPUT_REQUIRED':
+                    st.session_state.recruiter_manual_required = True
+                    st.warning(f"Recruiter profile scraping failed: {recruiter_raw.get('original_error', 'Unknown error')}")
+                    st.info("You can provide recruiter profile information manually in the sidebar for better personalization.")
+                    st.session_state.recruiter_profile = None
+                else:
+                    st.session_state.recruiter_profile = recruiter_raw
+
         # Matching
         with st.spinner("Evaluating match..."):
             st.session_state.match_results = match_cv_to_job(
@@ -144,6 +176,16 @@ if st.session_state.cv_struct and st.session_state.job_struct:
                 formatted_company_info = format_company_info_as_markdown(st.session_state.company_info)
                 st.markdown(formatted_company_info)
 
+    # Display recruiter profile if available
+    if st.session_state.recruiter_profile:
+        st.subheader("👤 Recruiter Profile")
+        if st.session_state.recruiter_profile.get('error') and st.session_state.recruiter_profile.get('error') != 'MANUAL_INPUT_REQUIRED':
+            st.error(f"Error scraping recruiter profile: {st.session_state.recruiter_profile['error']}")
+        else:
+            with st.expander("Recruiter Details", expanded=False):
+                formatted_recruiter_info = format_recruiter_profile_as_markdown(st.session_state.recruiter_profile)
+                st.markdown(formatted_recruiter_info)
+
     # Display match results
     if st.session_state.match_results:
         st.subheader("🔍 Match Results")
@@ -171,10 +213,16 @@ if st.session_state.cv_struct and st.session_state.job_struct:
                 if st.session_state.company_info and not st.session_state.company_info.get('error'):
                     company_context = format_company_info_as_markdown(st.session_state.company_info)
                 
+                # Include recruiter profile context if available
+                recruiter_context = ""
+                if st.session_state.recruiter_profile and not st.session_state.recruiter_profile.get('error'):
+                    recruiter_context = format_recruiter_profile_as_markdown(st.session_state.recruiter_profile)
+                
                 st.session_state.recruiter_message = generate_message(
                     st.session_state.cv_struct, 
                     st.session_state.job_struct, 
-                    company_context=company_context
+                    company_context=company_context,
+                    recruiter_context=recruiter_context
                 )
 
     # Display generated content
@@ -200,8 +248,8 @@ if st.session_state.cv_struct and st.session_state.job_struct:
 
 # Clear session state button (optional, for debugging/reset)
 if st.sidebar.button("Clear All Data"):
-    for key in ['cv_struct', 'job_struct', 'company_info', 'match_results', 'cover_letter', 'recruiter_message', 
-                'job_manual_required', 'company_manual_required', 'manual_job_text', 'manual_company_text']:
+    for key in ['cv_struct', 'job_struct', 'company_info', 'recruiter_profile', 'match_results', 'cover_letter', 'recruiter_message', 
+                'job_manual_required', 'company_manual_required', 'recruiter_manual_required', 'manual_job_text', 'manual_company_text', 'manual_recruiter_text']:
         if key in st.session_state:
             del st.session_state[key]
     st.rerun()
