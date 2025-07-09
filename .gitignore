@@ -4,3 +4,8 @@ cv_parser/__pycache__
 job_scraper/__pycache__
 .DS_Store
 __pycache__
+linkedin-user-data
+linkedin_storage_state.json
+package-lock.json
+package.json
+node_modules

@@ -1,0 +1,669 @@
+/* =============================================================================
+   PROFESSIONAL RECRUITER AGENT UI STYLES
+   Modern, clean design system for Streamlit application
+   ============================================================================= */
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* =============================================================================
+   CSS CUSTOM PROPERTIES (DESIGN SYSTEM)
+   ============================================================================= */
+:root {
+    /* Brand Colors */
+    --primary-color: #2563eb;
+    --primary-dark: #1d4ed8;
+    --primary-light: #3b82f6;
+    --primary-50: #eff6ff;
+    --primary-100: #dbeafe;
+    
+    /* Semantic Colors */
+    --secondary-color: #64748b;
+    --success-color: #10b981;
+    --success-light: #ecfdf5;
+    --warning-color: #f59e0b;
+    --warning-light: #fffbeb;
+    --error-color: #ef4444;
+    --error-light: #fef2f2;
+    --info-color: #0ea5e9;
+    --info-light: #f0f9ff;
+    
+    /* Neutral Colors */
+    --background-color: #f8fafc;
+    --surface-color: #ffffff;
+    --surface-secondary: #f1f5f9;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --text-muted: #94a3b8;
+    --text-inverse: #ffffff;
+    
+    /* Border & Dividers */
+    --border-color: #e2e8f0;
+    --border-color-dark: #cbd5e1;
+    --divider-color: #f1f5f9;
+    
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-2xl: 3rem;
+    
+    /* Border Radius */
+    --border-radius-sm: 6px;
+    --border-radius: 12px;
+    --border-radius-lg: 16px;
+    --border-radius-xl: 20px;
+    
+    /* Shadows */
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    
+    /* Transitions */
+    --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    /* Typography */
+    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    --font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+    
+    /* Z-index */
+    --z-dropdown: 1000;
+    --z-sticky: 1020;
+    --z-fixed: 1030;
+    --z-modal: 1040;
+    --z-popover: 1050;
+    --z-tooltip: 1060;
+}
+
+/* =============================================================================
+   GLOBAL STYLES
+   ============================================================================= */
+* {
+    font-family: var(--font-family);
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+/* =============================================================================
+   STREAMLIT SPECIFIC OVERRIDES
+   ============================================================================= */
+
+/* Main Container */
+.main .block-container {
+    max-width: 1400px;
+    padding: var(--spacing-xl) var(--spacing-md);
+    background: linear-gradient(135deg, var(--background-color) 0%, var(--surface-color) 100%);
+    min-height: 100vh;
+}
+
+/* Hide Streamlit branding */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+/* Reduce top padding */
+.css-18e3th9 {
+    padding-top: 1rem;
+}
+
+/* =============================================================================
+   TYPOGRAPHY
+   ============================================================================= */
+h1 {
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 2.5rem;
+    line-height: 1.2;
+    margin-bottom: var(--spacing-sm);
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+h2 {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 1.875rem;
+    line-height: 1.3;
+    margin: var(--spacing-xl) 0 var(--spacing-md) 0;
+}
+
+h3 {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 1.5rem;
+    line-height: 1.4;
+    margin: var(--spacing-lg) 0 var(--spacing-sm) 0;
+}
+
+h4 {
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-size: 1.25rem;
+    line-height: 1.4;
+    margin: var(--spacing-md) 0 var(--spacing-sm) 0;
+}
+
+p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: var(--spacing-md);
+}
+
+/* =============================================================================
+   LAYOUT COMPONENTS
+   ============================================================================= */
+
+/* Sidebar */
+.css-1d391kg {
+    background: var(--surface-color);
+    border-right: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+    padding: var(--spacing-lg);
+}
+
+/* Columns */
+.element-container .stColumn {
+    background: var(--surface-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-lg);
+    margin: var(--spacing-sm);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+.element-container .stColumn:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+/* Containers and Cards */
+.element-container {
+    background: var(--surface-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: var(--spacing-md);
+    border: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+.element-container:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+/* =============================================================================
+   BUTTONS
+   ============================================================================= */
+.stButton > button {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+    color: var(--text-inverse);
+    border: none;
+    border-radius: var(--border-radius);
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    font-size: 0.95rem;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+    width: 100%;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.stButton > button:hover {
+    background: linear-gradient(135deg, var(--primary-dark), var(--primary-color));
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.stButton > button:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-sm);
+}
+
+.stButton > button:focus {
+    outline: none;
+    box-shadow: var(--shadow-md), 0 0 0 3px rgb(37 99 235 / 0.1);
+}
+
+/* Primary Button Variant */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 1rem 2rem;
+}
+
+/* Secondary Button Variant */
+.stButton > button[kind="secondary"] {
+    background: var(--surface-color);
+    color: var(--primary-color);
+    border: 2px solid var(--primary-color);
+}
+
+.stButton > button[kind="secondary"]:hover {
+    background: var(--primary-light);
+    color: var(--text-inverse);
+}
+
+/* =============================================================================
+   FORM ELEMENTS
+   ============================================================================= */
+
+/* Text Inputs */
+.stTextInput > div > div > input {
+    border: 2px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 0.75rem var(--spacing-md);
+    font-size: 0.95rem;
+    transition: var(--transition);
+    background: var(--surface-color);
+    color: var(--text-primary);
+}
+
+.stTextInput > div > div > input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
+    outline: none;
+}
+
+.stTextInput > div > div > input::placeholder {
+    color: var(--text-muted);
+}
+
+/* Text Areas */
+.stTextArea > div > div > textarea {
+    border: 2px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 0.75rem var(--spacing-md);
+    font-size: 0.95rem;
+    transition: var(--transition);
+    background: var(--surface-color);
+    color: var(--text-primary);
+    font-family: var(--font-family);
+    resize: vertical;
+}
+
+.stTextArea > div > div > textarea:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
+    outline: none;
+}
+
+.stTextArea > div > div > textarea::placeholder {
+    color: var(--text-muted);
+}
+
+/* File Uploader */
+.stFileUploader {
+    border: 2px dashed var(--border-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-xl);
+    text-align: center;
+    background: var(--surface-color);
+    transition: var(--transition);
+    margin: var(--spacing-md) 0;
+}
+
+.stFileUploader:hover {
+    border-color: var(--primary-color);
+    background: var(--primary-50);
+}
+
+.stFileUploader [data-testid="stFileUploaderDropzone"] {
+    border: none;
+    background: transparent;
+}
+
+/* Select Boxes */
+.stSelectbox > div > div > select {
+    border: 2px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 0.75rem var(--spacing-md);
+    background: var(--surface-color);
+    color: var(--text-primary);
+    transition: var(--transition);
+}
+
+.stSelectbox > div > div > select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
+    outline: none;
+}
+
+/* =============================================================================
+   MESSAGES & ALERTS
+   ============================================================================= */
+
+/* Success Messages */
+.stSuccess {
+    background: var(--success-light);
+    border: 1px solid var(--success-color);
+    border-radius: var(--border-radius);
+    color: var(--success-color);
+    padding: var(--spacing-md);
+    margin: var(--spacing-md) 0;
+}
+
+/* Warning Messages */
+.stWarning {
+    background: var(--warning-light);
+    border: 1px solid var(--warning-color);
+    border-radius: var(--border-radius);
+    color: var(--warning-color);
+    padding: var(--spacing-md);
+    margin: var(--spacing-md) 0;
+}
+
+/* Error Messages */
+.stError {
+    background: var(--error-light);
+    border: 1px solid var(--error-color);
+    border-radius: var(--border-radius);
+    color: var(--error-color);
+    padding: var(--spacing-md);
+    margin: var(--spacing-md) 0;
+}
+
+/* Info Messages */
+.stInfo {
+    background: var(--info-light);
+    border: 1px solid var(--info-color);
+    border-radius: var(--border-radius);
+    color: var(--info-color);
+    padding: var(--spacing-md);
+    margin: var(--spacing-md) 0;
+}
+
+/* =============================================================================
+   DATA DISPLAY COMPONENTS
+   ============================================================================= */
+
+/* JSON Display */
+.stJson {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    overflow-x: auto;
+}
+
+/* Code Blocks */
+.stCode {
+    background: var(--surface-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    overflow-x: auto;
+}
+
+/* Metrics */
+.metric-container {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-lg);
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+}
+
+.metric-container:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+/* =============================================================================
+   NAVIGATION & TABS
+   ============================================================================= */
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    gap: var(--spacing-md);
+    background: var(--surface-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-sm);
+    border: 1px solid var(--border-color);
+}
+
+.stTabs [data-baseweb="tab"] {
+    background: transparent;
+    border-radius: var(--border-radius-sm);
+    color: var(--text-secondary);
+    font-weight: 500;
+    padding: var(--spacing-sm) var(--spacing-md);
+    transition: var(--transition);
+}
+
+.stTabs [data-baseweb="tab"][aria-selected="true"] {
+    background: var(--primary-color);
+    color: var(--text-inverse);
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+    background: var(--primary-100);
+    color: var(--primary-dark);
+}
+
+/* Expanders */
+.streamlit-expanderHeader {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+    font-weight: 500;
+    color: var(--text-primary);
+    transition: var(--transition);
+}
+
+.streamlit-expanderHeader:hover {
+    background: var(--surface-secondary);
+    box-shadow: var(--shadow-sm);
+}
+
+.streamlit-expanderContent {
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
+    background: var(--surface-color);
+    padding: var(--spacing-md);
+}
+
+/* =============================================================================
+   PROGRESS & LOADING
+   ============================================================================= */
+
+/* Progress Bars */
+.stProgress > div > div > div {
+    background: var(--primary-color);
+    border-radius: var(--border-radius);
+}
+
+.stProgress > div > div {
+    background: var(--border-color);
+    border-radius: var(--border-radius);
+    height: 8px;
+}
+
+/* Spinner */
+.stSpinner {
+    border-color: var(--primary-color);
+}
+
+/* =============================================================================
+   ANIMATIONS
+   ============================================================================= */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Apply animations */
+.element-container {
+    animation: fadeIn 0.5s ease-out;
+}
+
+.loading {
+    animation: pulse 2s infinite;
+}
+
+/* =============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================= */
+@media (max-width: 768px) {
+    .main .block-container {
+        padding: var(--spacing-md) var(--spacing-sm);
+    }
+    
+    h1 {
+        font-size: 2rem;
+    }
+    
+    h2 {
+        font-size: 1.5rem;
+    }
+    
+    .element-container .stColumn {
+        margin: var(--spacing-xs);
+        padding: var(--spacing-md);
+    }
+    
+    .stButton > button {
+        padding: 0.625rem 1.25rem;
+        font-size: 0.875rem;
+    }
+    
+    .stFileUploader {
+        padding: var(--spacing-md);
+    }
+}
+
+@media (max-width: 480px) {
+    .main .block-container {
+        padding: var(--spacing-sm);
+    }
+    
+    h1 {
+        font-size: 1.75rem;
+    }
+    
+    .stButton > button {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+    }
+}
+
+/* =============================================================================
+   UTILITY CLASSES
+   ============================================================================= */
+
+/* Status Indicators */
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: var(--spacing-sm);
+}
+
+.status-success { background-color: var(--success-color); }
+.status-warning { background-color: var(--warning-color); }
+.status-error { background-color: var(--error-color); }
+.status-info { background-color: var(--info-color); }
+
+/* Gradients */
+.gradient-bg {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+}
+
+.gradient-text {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Shadows */
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+.shadow-xl { box-shadow: var(--shadow-xl); }
+
+/* Spacing */
+.p-sm { padding: var(--spacing-sm); }
+.p-md { padding: var(--spacing-md); }
+.p-lg { padding: var(--spacing-lg); }
+.p-xl { padding: var(--spacing-xl); }
+
+.m-sm { margin: var(--spacing-sm); }
+.m-md { margin: var(--spacing-md); }
+.m-lg { margin: var(--spacing-lg); }
+.m-xl { margin: var(--spacing-xl); }
+
+/* Text Utilities */
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+
+.font-weight-light { font-weight: 300; }
+.font-weight-normal { font-weight: 400; }
+.font-weight-medium { font-weight: 500; }
+.font-weight-semibold { font-weight: 600; }
+.font-weight-bold { font-weight: 700; }
+
+/* =============================================================================
+   DARK MODE SUPPORT (Optional)
+   ============================================================================= */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --background-color: #0f172a;
+        --surface-color: #1e293b;
+        --surface-secondary: #334155;
+        --text-primary: #f1f5f9;
+        --text-secondary: #cbd5e1;
+        --text-muted: #64748b;
+        --border-color: #334155;
+        --border-color-dark: #475569;
+    }
+}

@@ -1,23 +1,34 @@
 import asyncio
 import os
 import re
+import random
 from urllib.parse import urlparse
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from config import settings
+
+def get_random_user_agent():
+    """Generate random user agents to avoid detection"""
+    agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15"
+    ]
+    return random.choice(agents)
 
 async def scrape_linkedin_company(company_url: str) -> dict:
     """
     Directly scrape a specific LinkedIn company URL using crawl4ai
     """
     try:
-        # Browser configuration with LinkedIn-optimized settings
+        # Browser configuration WITHOUT authentication - appears as regular visitor
         browser_config = BrowserConfig(
             headless=True,
             browser_type="chromium",
-            viewport_width=1920,
-            viewport_height=1080,
+            viewport_width=random.randint(1366, 1920),
+            viewport_height=random.randint(768, 1080),
             headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                "User-Agent": get_random_user_agent(),
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.5",
                 "Accept-Encoding": "gzip, deflate, br",
@@ -26,39 +37,47 @@ async def scrape_linkedin_company(company_url: str) -> dict:
                 "Sec-Fetch-Dest": "document",
                 "Sec-Fetch-Mode": "navigate",
                 "Sec-Fetch-Site": "none",
-                "Cache-Control": "max-age=0",
-                "Cookie": f"li_at={settings.LI_AT_COOKIE}" if hasattr(settings, 'LI_AT_COOKIE') and settings.LI_AT_COOKIE != "your_linkedin_cookie_value" else ""
+                "Cache-Control": "no-cache"
+                # NO COOKIES - this eliminates detection risk
             },
             extra_args=[
                 "--disable-blink-features=AutomationControlled",
                 "--disable-dev-shm-usage",
                 "--no-sandbox",
-                "--disable-web-security"
+                "--disable-web-security",
+                "--disable-features=VizDisplayCompositor",
+                "--disable-extensions",
+                "--no-first-run"
             ],
-            verbose=True
+            verbose=False  # Reduce logs for stealth
         )
         
-        # Crawl configuration for company page content
+        # Human-like crawl configuration with randomized timing
         run_config = CrawlerRunConfig(
             cache_mode=CacheMode.BYPASS,
-            # LinkedIn company page specific JavaScript
+            # Randomized human-like scrolling for company pages
             js_code=[
+                f"await new Promise(resolve => setTimeout(resolve, {random.randint(1000, 2000)}));",
+                "window.scrollTo(0, window.innerHeight * 0.3);",
+                f"await new Promise(resolve => setTimeout(resolve, {random.randint(800, 1500)}));",
+                "window.scrollTo(0, window.innerHeight * 0.7);",
+                f"await new Promise(resolve => setTimeout(resolve, {random.randint(1000, 2000)}));",
                 "window.scrollTo(0, document.body.scrollHeight);",
-                "await new Promise(resolve => setTimeout(resolve, 3000));",
-                "document.querySelector('.org-top-card-summary')?.scrollIntoView();",
-                "await new Promise(resolve => setTimeout(resolve, 2000));",
-                "document.querySelector('.org-about-us')?.scrollIntoView();",
-                "await new Promise(resolve => setTimeout(resolve, 2000));",
-                "window.scrollTo(0, 0);"
+                f"await new Promise(resolve => setTimeout(resolve, {random.randint(2000, 4000)}));",
+                "window.scrollTo(0, 0);",
+                f"await new Promise(resolve => setTimeout(resolve, {random.randint(500, 1000)}));"
             ],
-            page_timeout=30000,
-            delay_before_return_html=3.0,
+            page_timeout=45000,
+            delay_before_return_html=random.uniform(3.0, 6.0),
             remove_overlay_elements=True,
-            process_iframes=True,
-            magic=True,  # Enable anti-detection features
+            process_iframes=False,
+            magic=True,
             simulate_user=True,
             word_count_threshold=50
         )
+        
+        # Add random delay before scraping
+        await asyncio.sleep(random.uniform(1, 3))
         
         async with AsyncWebCrawler(config=browser_config) as crawler:
             result = await crawler.arun(
