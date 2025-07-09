@@ -8,10 +8,12 @@ from pathlib import Path
 from cv_parser.cv_reader import read_cv
 from cv_parser.cv_structurer import structure_cv
 from cv_parser.cv_embedder import chunk_cv, embed_cv
-from job_scraper.linkedin_scraper import fetch_linkedin_job_sync
+from job_scraper.linkedin_scraper import fetch_linkedin_job_enhanced  # Updated import
 from job_scraper.job_parser import parse_job_description
 from job_scraper.recruiter_scraper import fetch_recruiter_info_sync, format_company_info_as_markdown
 from job_scraper.recruiter_profile_scraper import fetch_recruiter_profile_sync, format_recruiter_profile_as_markdown
+from job_scraper.recruiter_parser import parse_recruiter_profile, format_recruiter_summary, enhance_recruiter_data_with_insights
+
 from matching_engine.matcher import match_cv_to_job
 from matching_engine.prompt_generator import generate_cover_letter, generate_message
 
@@ -86,7 +88,8 @@ def init_session_state():
         'manual_job_text': None,
         'manual_company_text': None,
         'manual_recruiter_text': None,
-        'analysis_step': 'upload'  # Track current step
+        'analysis_step': 'upload',  # Track current step
+        'scraping_method': None  # Track which scraping method was used
     }
     
     for key, default_value in default_states.items():
@@ -172,11 +175,12 @@ def render_input_section():
         with col2:
             st.markdown("### ℹ️ Tips")
             st.info("""
-            **For best results:**
-            - Use a well-formatted CV
-            - Ensure job URL is accessible
-            - Add company & recruiter URLs for personalization
-            - Check that you're not logged into LinkedIn in the same browser
+            **Enhanced Scraping Features:**
+            - Multi-method scraping with fallbacks
+            - Stealth mode to avoid detection
+            - Public endpoint access when possible
+            - Automatic retry with different methods
+            - Manual input as final fallback
             """)
             
             if cv_file and job_url:
@@ -190,7 +194,7 @@ def render_manual_input_sections():
     """Render manual input sections when scraping fails"""
     if st.session_state.get('job_manual_required', False):
         with st.expander("⚠️ Manual Job Description Required", expanded=True):
-            st.warning("Job scraping failed. Please paste the job description manually:")
+            st.warning("Enhanced job scraping failed after trying multiple methods. Please paste the job description manually:")
             manual_job_text = st.text_area(
                 "Job Description", 
                 height=200, 
@@ -249,20 +253,44 @@ def process_cv(cv_file):
         return None
 
 def process_job(job_url):
-    """Process job URL and return structured data"""
+    """Process job URL using enhanced scraping and return structured data"""
     try:
         manual_job_text = st.session_state.get('manual_job_text', None)
-        job_raw = fetch_linkedin_job_sync(job_url, manual_job_text)
         
+        # Use the enhanced LinkedIn scraper
+        job_raw = fetch_linkedin_job_enhanced(job_url, manual_job_text)
+        
+        # Handle the enhanced scraper's response format
         if job_raw.get('error') == 'MANUAL_INPUT_REQUIRED':
             st.session_state.job_manual_required = True
-            st.error(f"Job scraping failed: {job_raw.get('original_error', 'Unknown error')}")
+            st.error(f"Enhanced job scraping failed: {job_raw.get('error', 'Unknown error')}")
+            st.info("All automated methods failed. Please provide the job description manually above.")
+            return None
+        
+        # Check if we have an error but not manual input required
+        if job_raw.get('error') and job_raw.get('error') != 'MANUAL_INPUT_REQUIRED':
+            st.session_state.job_manual_required = True
+            st.error(f"Job scraping failed: {job_raw.get('error', 'Unknown error')}")
             st.info("Please provide the job description manually above.")
             return None
         
+        # Track which scraping method was successful
+        if job_raw.get('method'):
+            st.session_state.scraping_method = job_raw['method']
+            method_display = {
+                'unauthenticated_direct': '🔓 Direct Scraping',
+                'api_job_api': '🔌 API Endpoint',
+                'manual_input': '✋ Manual Input'
+            }.get(job_raw['method'], f"📡 {job_raw['method']}")
+            
+            st.success(f"Job data retrieved via: {method_display}")
+        
         return parse_job_description(job_raw["markdown"])
+        
     except Exception as e:
         st.error(f"Error processing job: {str(e)}")
+        # Set manual input required on any exception
+        st.session_state.job_manual_required = True
         return None
 
 def process_company(company_url):
@@ -285,7 +313,7 @@ def process_company(company_url):
         return None
 
 def process_recruiter(recruiter_url):
-    """Process recruiter URL and return data"""
+    """Process recruiter URL and return structured data using LLM parser"""
     if not recruiter_url:
         return None
         
@@ -298,17 +326,127 @@ def process_recruiter(recruiter_url):
             st.warning(f"Recruiter profile scraping failed: {recruiter_raw.get('original_error', 'Unknown error')}")
             return None
         
+        # If we have scraped content, parse it with LLM
+        if recruiter_raw.get('markdown'):
+            # Use the new LLM-based parser instead of regex parsing
+            parsed_recruiter = parse_recruiter_profile(recruiter_raw['markdown'])
+            
+            # Check if parsing was successful
+            if parsed_recruiter.get('error'):
+                st.warning(f"Recruiter profile parsing failed: {parsed_recruiter['error']}")
+                # Fall back to the original metadata if LLM parsing fails
+                recruiter_raw['parsed_data'] = recruiter_raw.get('metadata', {})
+            else:
+                # Enhance with insights based on job context if available
+                if st.session_state.get('job_struct'):
+                    parsed_recruiter = enhance_recruiter_data_with_insights(
+                        parsed_recruiter, 
+                        st.session_state.job_struct
+                    )
+                
+                # Replace the metadata with parsed data
+                recruiter_raw['parsed_data'] = parsed_recruiter
+                recruiter_raw['summary'] = format_recruiter_summary(parsed_recruiter)
+                
+                # Success message showing what was extracted
+                name = parsed_recruiter.get('recruiter_name', 'Recruiter')
+                position = parsed_recruiter.get('current_position', 'Unknown position')
+                st.success(f"✅ Parsed profile: {name} - {position}")
+        
         return recruiter_raw
+        
     except Exception as e:
         st.warning(f"Error processing recruiter: {str(e)}")
         return None
 
+def render_recruiter_results_enhanced(recruiter_data):
+    """Enhanced recruiter results display using parsed data"""
+    if not recruiter_data:
+        st.info("No recruiter profile provided")
+        return
+    
+    if recruiter_data.get('error') and recruiter_data.get('error') != 'MANUAL_INPUT_REQUIRED':
+        st.error(f"Error: {recruiter_data['error']}")
+        return
+    
+    # Display summary if available
+    if recruiter_data.get('summary'):
+        st.markdown("### 📋 Recruiter Overview")
+        st.markdown(recruiter_data['summary'])
+    
+    # Display structured data
+    if recruiter_data.get('parsed_data'):
+        parsed_data = recruiter_data['parsed_data']
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Professional Details")
+            st.write(f"**Name:** {parsed_data.get('recruiter_name', 'N/A')}")
+            st.write(f"**Position:** {parsed_data.get('current_position', 'N/A')}")
+            st.write(f"**Company:** {parsed_data.get('current_company', 'N/A')}")
+            st.write(f"**Location:** {parsed_data.get('location', 'N/A')}")
+            st.write(f"**Experience:** {parsed_data.get('years_experience', 'N/A')}")
+        
+        with col2:
+            st.markdown("#### Recruiting Focus")
+            
+            specializations = parsed_data.get('specializations', [])
+            if specializations:
+                st.write("**Specializations:**")
+                for spec in specializations:
+                    st.write(f"• {spec}")
+            
+            industry_focus = parsed_data.get('industry_focus', [])
+            if industry_focus:
+                st.write("**Industry Focus:**")
+                for industry in industry_focus:
+                    st.write(f"• {industry}")
+        
+        # Show personalization insights if available
+        if parsed_data.get('personalization_insights'):
+            insights = parsed_data['personalization_insights']
+            
+            with st.expander("🎯 Personalization Insights", expanded=False):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if insights.get('key_talking_points'):
+                        st.markdown("**Key Discussion Points:**")
+                        for point in insights['key_talking_points']:
+                            st.write(f"• {point}")
+                
+                with col2:
+                    if insights.get('approach_recommendations'):
+                        st.markdown("**Communication Approach:**")
+                        for rec in insights['approach_recommendations']:
+                            st.write(f"• {rec}")
+        
+        # Raw structured data in expandable section
+        with st.expander("📊 Full Structured Data", expanded=False):
+            st.json(parsed_data, expanded=False)
+    
+    # Show original markdown if no parsed data
+    elif recruiter_data.get('markdown'):
+        with st.expander("📄 Raw Profile Content", expanded=False):
+            st.markdown(recruiter_data['markdown'])
+            
 def render_results():
     """Render analysis results in an organized way"""
     if not (st.session_state.cv_struct and st.session_state.job_struct):
         return
     
     st.markdown("## 📊 Analysis Results")
+    
+    # Show scraping method used if available
+    if st.session_state.get('scraping_method'):
+        method_info = {
+            'unauthenticated_direct': '🔓 Direct scraping without authentication',
+            'api_job_api': '🔌 LinkedIn public API endpoint',
+            'manual_input': '✋ Manual input provided by user'
+        }.get(st.session_state.scraping_method, f"📡 {st.session_state.scraping_method}")
+        
+        st.info(f"**Job Data Source:** {method_info}")
     
     # Results tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["📄 CV", "💼 Job", "🏢 Company", "👤 Recruiter", "🔍 Match"])
@@ -332,14 +470,8 @@ def render_results():
             st.info("No company information provided")
     
     with tab4:
-        if st.session_state.recruiter_profile:
-            if st.session_state.recruiter_profile.get('error') and st.session_state.recruiter_profile.get('error') != 'MANUAL_INPUT_REQUIRED':
-                st.error(f"Error: {st.session_state.recruiter_profile['error']}")
-            else:
-                formatted_recruiter_info = format_recruiter_profile_as_markdown(st.session_state.recruiter_profile)
-                st.markdown(formatted_recruiter_info)
-        else:
-            st.info("No recruiter profile provided")
+        # Use the enhanced recruiter display
+        render_recruiter_results_enhanced(st.session_state.recruiter_profile)
     
     with tab5:
         if st.session_state.match_results:
@@ -348,7 +480,7 @@ def render_results():
             st.info("Run analysis to see match results")
 
 def render_communication_section():
-    """Render communication generation section"""
+    """Render communication generation section with enhanced recruiter context"""
     if not (st.session_state.cv_struct and st.session_state.job_struct):
         return
     
@@ -382,14 +514,37 @@ def render_communication_section():
     
     with col2:
         st.markdown("### 💬 Recruiter Message")
+        
+        # Show personalization preview if recruiter data is available
+        if (st.session_state.recruiter_profile and 
+            st.session_state.recruiter_profile.get('parsed_data')):
+            
+            parsed_recruiter = st.session_state.recruiter_profile['parsed_data']
+            name = parsed_recruiter.get('recruiter_name', 'Recruiter')
+            
+            st.info(f"📋 Will personalize for: **{name}**")
+            
+            # Show key personalization hooks if available
+            if parsed_recruiter.get('personalization_insights'):
+                insights = parsed_recruiter['personalization_insights']
+                hooks = insights.get('personalization_hooks', [])
+                if hooks:
+                    st.caption(f"🎯 Hooks: {', '.join(hooks[:2])}")
+        
         if st.button("Generate Recruiter Message", key="generate_message", type="primary"):
-            with st.spinner("Crafting your recruiter message..."):
+            with st.spinner("Crafting personalized recruiter message..."):
+                # Enhanced context using parsed recruiter data
                 company_context = ""
                 if st.session_state.company_info and not st.session_state.company_info.get('error'):
                     company_context = format_company_info_as_markdown(st.session_state.company_info)
                 
+                # Use the enhanced recruiter context
                 recruiter_context = ""
-                if st.session_state.recruiter_profile and not st.session_state.recruiter_profile.get('error'):
+                if (st.session_state.recruiter_profile and 
+                    st.session_state.recruiter_profile.get('summary')):
+                    recruiter_context = st.session_state.recruiter_profile['summary']
+                elif (st.session_state.recruiter_profile and 
+                      not st.session_state.recruiter_profile.get('error')):
                     recruiter_context = format_recruiter_profile_as_markdown(st.session_state.recruiter_profile)
                 
                 st.session_state.recruiter_message = generate_message(
@@ -445,13 +600,13 @@ def main():
     st.markdown("---")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("🚀 Start Analysis", key="analyze", type="primary"):
+        if st.button("🚀 Start Enhanced Analysis", key="analyze", type="primary"):
             if not cv_file or not job_url:
                 st.error("Please upload a CV and enter a LinkedIn job URL.")
                 st.stop()
             
             # Clear previous results
-            for key in ['cv_struct', 'job_struct', 'company_info', 'recruiter_profile', 'match_results', 'cover_letter', 'recruiter_message']:
+            for key in ['cv_struct', 'job_struct', 'company_info', 'recruiter_profile', 'match_results', 'cover_letter', 'recruiter_message', 'scraping_method']:
                 st.session_state[key] = None
             
             # Process each component
@@ -465,8 +620,8 @@ def main():
             if not st.session_state.cv_struct:
                 st.stop()
             
-            # Job Processing
-            with st.spinner("💼 Analyzing job posting..."):
+            # Enhanced Job Processing
+            with st.spinner("💼 Analyzing job posting with enhanced methods..."):
                 st.session_state.job_struct = process_job(job_url)
                 progress_bar.progress(40)
             
@@ -493,7 +648,7 @@ def main():
                 )
                 progress_bar.progress(100)
             
-            st.success("✅ Analysis complete!")
+            st.success("✅ Enhanced analysis complete!")
             st.balloons()
     
     # Render results and communication sections
