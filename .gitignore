@@ -9,3 +9,5 @@ linkedin_storage_state.json
 package-lock.json
 package.json
 node_modules
+linkedin_state.json
+linkedin_cookies.json
