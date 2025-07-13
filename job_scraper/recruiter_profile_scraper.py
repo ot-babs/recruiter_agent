@@ -2,9 +2,24 @@ import asyncio
 import os
 import re
 import random
+import json
 from urllib.parse import urlparse
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from config import settings
+
+def load_linkedin_auth_state():
+    """Load authentication state from the extracted JSON file"""
+    try:
+        auth_file = os.path.join(os.path.dirname(__file__), 'linkedin_storage_state.json')
+        if os.path.exists(auth_file):
+            with open(auth_file, 'r') as f:
+                return json.load(f)
+        else:
+            print("⚠️ No linkedin_storage_state.json found - falling back to unauthenticated scraping")
+            return None
+    except Exception as e:
+        print(f"⚠️ Error loading auth state: {e}")
+        return None
 
 def get_random_user_agent():
     """Generate random user agents to avoid detection"""
@@ -16,12 +31,36 @@ def get_random_user_agent():
     ]
     return random.choice(agents)
 
+def extract_all_linkedin_cookies(auth_state):
+    """Extract ALL LinkedIn cookies (the key fix!)"""
+    if not auth_state or 'cookies' not in auth_state:
+        return ""
+    
+    # Get ALL LinkedIn cookies, not just essential ones
+    cookie_header = []
+    for cookie in auth_state['cookies']:
+        if 'linkedin.com' in cookie['domain']:
+            cookie_header.append(f"{cookie['name']}={cookie['value']}")
+    
+    cookie_string = "; ".join(cookie_header)
+    print(f"🍪 Using {len(cookie_header)} LinkedIn cookies")
+    return cookie_string
+
 async def scrape_linkedin_recruiter_profile(recruiter_url: str) -> dict:
     """
-    Directly scrape a specific LinkedIn recruiter profile URL using crawl4ai
+    Scrape LinkedIn recruiter profile with FULL authentication (ALL cookies)
     """
     try:
-        # Browser configuration WITHOUT authentication - appears as regular visitor
+        # Load authentication state
+        auth_state = load_linkedin_auth_state()
+        
+        if not auth_state:
+            return {
+                "url": recruiter_url,
+                "error": "No authentication state found - please run extract_linkedin_auth.js"
+            }
+        
+        # Browser configuration with ALL LinkedIn cookies
         browser_config = BrowserConfig(
             headless=True,
             browser_type="chromium",
@@ -37,8 +76,9 @@ async def scrape_linkedin_recruiter_profile(recruiter_url: str) -> dict:
                 "Sec-Fetch-Dest": "document",
                 "Sec-Fetch-Mode": "navigate",
                 "Sec-Fetch-Site": "none",
-                "Cache-Control": "no-cache"
-                # NO COOKIES - this eliminates detection risk
+                "Cache-Control": "no-cache",
+                # THE KEY FIX: Use ALL LinkedIn cookies
+                "Cookie": extract_all_linkedin_cookies(auth_state)
             },
             extra_args=[
                 "--disable-blink-features=AutomationControlled",
@@ -47,37 +87,67 @@ async def scrape_linkedin_recruiter_profile(recruiter_url: str) -> dict:
                 "--disable-web-security",
                 "--disable-features=VizDisplayCompositor",
                 "--disable-extensions",
-                "--no-first-run"
+                "--no-first-run",
+                "--disable-default-apps",
+                "--disable-sync"
             ],
-            verbose=False  # Reduce logs for stealth
+            verbose=False
         )
         
-        # Human-like crawl configuration with randomized timing
+        # Generate random delays for human-like behavior
+        delay1 = random.randint(2000, 4000)
+        delay2 = random.randint(1500, 3000)
+        delay3 = random.randint(2000, 4000)
+        delay4 = random.randint(2000, 4000)
+        delay5 = random.randint(3000, 5000)
+        delay6 = random.randint(1000, 2000)
+        delay7 = random.randint(1000, 2000)
+        
+        # Simple but effective JavaScript for scrolling
+        js_script = f"""
+        (async () => {{
+            console.log('Starting authenticated profile scraping...');
+            await new Promise(resolve => setTimeout(resolve, {delay1}));
+            
+            // Scroll like a human reading a profile
+            window.scrollTo(0, window.innerHeight * 0.2);
+            await new Promise(resolve => setTimeout(resolve, {delay2}));
+            
+            window.scrollTo(0, window.innerHeight * 0.5);
+            await new Promise(resolve => setTimeout(resolve, {delay3}));
+            
+            window.scrollTo(0, window.innerHeight * 0.8);
+            await new Promise(resolve => setTimeout(resolve, {delay4}));
+            
+            window.scrollTo(0, document.body.scrollHeight);
+            await new Promise(resolve => setTimeout(resolve, {delay5}));
+            
+            // Scroll back up slowly like reading
+            window.scrollTo(0, window.innerHeight * 0.6);
+            await new Promise(resolve => setTimeout(resolve, {delay6}));
+            
+            window.scrollTo(0, 0);
+            await new Promise(resolve => setTimeout(resolve, {delay7}));
+            
+            console.log('Profile scrolling complete');
+        }})();
+        """
+        
+        # Human-like crawl configuration
         run_config = CrawlerRunConfig(
             cache_mode=CacheMode.BYPASS,
-            # Randomized human-like scrolling
-            js_code=[
-                f"await new Promise(resolve => setTimeout(resolve, {random.randint(1000, 2000)}));",
-                "window.scrollTo(0, window.innerHeight * 0.3);",
-                f"await new Promise(resolve => setTimeout(resolve, {random.randint(800, 1500)}));",
-                "window.scrollTo(0, window.innerHeight * 0.7);",
-                f"await new Promise(resolve => setTimeout(resolve, {random.randint(1000, 2000)}));",
-                "window.scrollTo(0, document.body.scrollHeight);",
-                f"await new Promise(resolve => setTimeout(resolve, {random.randint(2000, 4000)}));",
-                "window.scrollTo(0, 0);",
-                f"await new Promise(resolve => setTimeout(resolve, {random.randint(500, 1000)}));"
-            ],
-            page_timeout=45000,
-            delay_before_return_html=random.uniform(3.0, 6.0),
+            js_code=js_script,
+            page_timeout=60000,
+            delay_before_return_html=random.uniform(4.0, 8.0),
             remove_overlay_elements=True,
             process_iframes=False,
             magic=True,
             simulate_user=True,
-            word_count_threshold=100
+            word_count_threshold=200
         )
         
-        # Add random delay before scraping
-        await asyncio.sleep(random.uniform(1, 3))
+        # Random delay before scraping (simulate human behavior)
+        await asyncio.sleep(random.uniform(2, 5))
         
         async with AsyncWebCrawler(config=browser_config) as crawler:
             result = await crawler.arun(
@@ -93,22 +163,27 @@ async def scrape_linkedin_recruiter_profile(recruiter_url: str) -> dict:
                 # Debug: print what we actually got
                 print(f"First 500 chars: {result.markdown[:500]}")
                 
-                # Check if we got meaningful content
-                if len(result.markdown.strip()) < 200:
+                # Check if we got authenticated content
+                if is_authenticated_content(result.markdown):
+                    print("🎉 AUTHENTICATED PROFILE DATA RETRIEVED!")
+                    
+                    # Parse recruiter information from authenticated content
+                    recruiter_data = parse_authenticated_recruiter_profile(result.markdown, recruiter_url)
+                    
                     return {
                         "url": recruiter_url,
-                        "error": "Recruiter profile content too short - likely blocked or login required"
+                        "markdown": result.markdown,
+                        "html": result.cleaned_html,
+                        "metadata": recruiter_data,
+                        "authenticated": True
+                    }
+                else:
+                    print("⚠️ Still getting public profile view - authentication may have failed")
+                    return {
+                        "url": recruiter_url,
+                        "error": "Authentication failed - only public profile data available"
                     }
                 
-                # Parse recruiter information
-                recruiter_data = parse_recruiter_profile_content(result.markdown, recruiter_url)
-                
-                return {
-                    "url": recruiter_url,
-                    "markdown": result.markdown,
-                    "html": result.cleaned_html,
-                    "metadata": recruiter_data,
-                }
             else:
                 print(f"❌ Failed to scrape recruiter profile: {result.error_message}")
                 return {
@@ -128,33 +203,61 @@ async def scrape_linkedin_recruiter_profile(recruiter_url: str) -> dict:
             "metadata": {},
         }
 
-def parse_recruiter_profile_content(markdown_content: str, recruiter_url: str) -> dict:
+def is_authenticated_content(content: str) -> bool:
+    """Check if we got authenticated content vs public profile"""
+    # Signs of authenticated access
+    authenticated_indicators = [
+        "Send message",
+        "Connect",
+        "Follow",
+        "More actions",
+        "Contact info",
+        "Message",
+        "years of experience"  # Usually only shown to authenticated users
+    ]
+    
+    # Signs of public/unauthenticated access
+    public_indicators = [
+        "Sign in to view",
+        "Join to view",
+        "Sign up to see"
+    ]
+    
+    has_authenticated = any(indicator in content for indicator in authenticated_indicators)
+    has_public = any(indicator in content for indicator in public_indicators)
+    
+    print(f"🔍 Authentication check: authenticated_signals={has_authenticated}, public_signals={has_public}")
+    
+    return has_authenticated and not has_public
+
+def parse_authenticated_recruiter_profile(markdown_content: str, recruiter_url: str) -> dict:
     """
-    Extract recruiter metadata from scraped markdown content
+    Parse authenticated recruiter profile content with enhanced patterns
     """
-    # Extract recruiter name
+    # Enhanced patterns for authenticated LinkedIn profiles
     name_patterns = [
         r'^#\s+(.+?)(?:\n|$)',  # First markdown heading
         r'([A-Z][a-zA-Z\s.-]+?)\s+\|\s+LinkedIn',
         r'^(.+?)(?:\n.*?at\s+)',  # Name followed by position
-        r'([A-Z][a-zA-Z\s.-]+?)(?:\s+LinkedIn\s+Profile|$)'
+        r'h1.*?>([^<]+)<'  # HTML h1 tag
     ]
     
     recruiter_name = "Recruiter"
     for pattern in name_patterns:
-        match = re.search(pattern, markdown_content, re.MULTILINE)
+        match = re.search(pattern, markdown_content, re.MULTILINE | re.IGNORECASE)
         if match:
             potential_name = match.group(1).strip()
             if len(potential_name) > 2 and len(potential_name) < 50 and not any(word in potential_name.lower() for word in ['linkedin', 'profile', 'company']):
                 recruiter_name = potential_name.replace(" | LinkedIn", "").strip()
                 break
     
-    # Extract current position/title
+    # Enhanced position extraction for authenticated profiles
     position_patterns = [
         r'([A-Z][a-zA-Z\s,&.-]+?)\s+at\s+([A-Z][a-zA-Z\s&.,Inc-]+?)(?:\n|$)',
-        r'Current:\s*([A-Z][a-zA-Z\s,&.-]+?)(?:\n|$)',
-        r'Title:\s*([A-Z][a-zA-Z\s,&.-]+?)(?:\n|$)',
-        r'Position:\s*([A-Z][a-zA-Z\s,&.-]+?)(?:\n|$)'
+        r'## ([A-Z][a-zA-Z\s,&.-]+?)(?:\n|$)',
+        r'\*\*([A-Z][a-zA-Z\s,&.-]+?)\*\*',
+        r'headline.*?>([^<]+)',
+        r'pv-entity__secondary-title.*?>([^<]+)'
     ]
     
     current_position = "Not specified"
@@ -166,15 +269,22 @@ def parse_recruiter_profile_content(markdown_content: str, recruiter_url: str) -
                 current_position = match.group(1).strip()
                 current_company = match.group(2).strip()
             else:
-                current_position = match.group(1).strip()
+                position_text = match.group(1).strip()
+                if " at " in position_text:
+                    parts = position_text.split(" at ", 1)
+                    current_position = parts[0].strip()
+                    current_company = parts[1].strip()
+                else:
+                    current_position = position_text
             break
     
-    # Extract location
+    # Enhanced location extraction
     location_patterns = [
-        r'Location:\s*([A-Z][a-zA-Z\s,.-]+?)(?:\n|$)',
+        r'([A-Z][a-zA-Z\s,.-]+?),\s*(?:United Kingdom|UK|England)',
+        r'Location[:\s]*([A-Z][a-zA-Z\s,.-]+?)(?:\n|$)',
+        r'([A-Z][a-zA-Z\s,.-]+?)\s+Area',
         r'Based in\s+([A-Z][a-zA-Z\s,.-]+?)(?:\n|$)',
-        r'([A-Z][a-zA-Z\s,.-]+?),\s*(?:United States|USA|US)',
-        r'([A-Z][a-zA-Z\s,.-]+?)\s+Area'
+        r'\b(London(?:\s+Area)?)\b'
     ]
     
     location = "Not specified"
@@ -186,70 +296,29 @@ def parse_recruiter_profile_content(markdown_content: str, recruiter_url: str) -
                 location = potential_location
                 break
     
-    # Extract specializations/focus areas
+    # Extract experience and specializations with authenticated patterns
     specialization_patterns = [
         r'Specializes? in\s+([a-zA-Z\s,&.-]+?)(?:\n|$)',
         r'Focus(?:es)?\s+on\s+([a-zA-Z\s,&.-]+?)(?:\n|$)',
         r'Expert in\s+([a-zA-Z\s,&.-]+?)(?:\n|$)',
         r'Recruiting\s+([a-zA-Z\s,&.-]+?)(?:\n|$)',
-        r'Talent Acquisition.*?([a-zA-Z\s,&.-]+?)(?:\n|$)'
+        r'Talent Acquisition.*?([a-zA-Z\s,&.-]+?)(?:\n|$)',
+        r'(\d+)\+?\s+years?\s+(?:of\s+)?experience',
+        r'helping\s+([a-zA-Z\s,&.-]+?)\s+professionals'
     ]
     
     specializations = []
+    years_experience = "Not specified"
+    
     for pattern in specialization_patterns:
         matches = re.finditer(pattern, markdown_content, re.IGNORECASE)
         for match in matches:
             spec = match.group(1).strip()
             if len(spec) > 3 and len(spec) < 100:
-                specializations.append(spec)
-    
-    # Extract years of experience
-    experience_patterns = [
-        r'(\d+)\+?\s+years?\s+(?:of\s+)?experience',
-        r'(\d+)\+?\s+years?\s+in\s+recruiting',
-        r'Over\s+(\d+)\s+years?',
-        r'(\d+)\+?\s+years?\s+talent'
-    ]
-    
-    years_experience = "Not specified"
-    for pattern in experience_patterns:
-        match = re.search(pattern, markdown_content, re.IGNORECASE)
-        if match:
-            years_experience = f"{match.group(1)}+ years"
-            break
-    
-    # Extract education (basic)
-    education_patterns = [
-        r'Education.*?([A-Z][a-zA-Z\s,&.-]+?)(?:\n|$)',
-        r'University of\s+([A-Z][a-zA-Z\s,&.-]+?)(?:\n|$)',
-        r'([A-Z][a-zA-Z\s,&.-]+?)\s+University',
-        r'Degree.*?([A-Z][a-zA-Z\s,&.-]+?)(?:\n|$)'
-    ]
-    
-    education = "Not specified"
-    for pattern in education_patterns:
-        match = re.search(pattern, markdown_content, re.IGNORECASE)
-        if match:
-            potential_edu = match.group(1).strip()
-            if len(potential_edu) > 3 and len(potential_edu) < 100:
-                education = potential_edu
-                break
-    
-    # Extract recruiting focus/industries
-    industry_focus_patterns = [
-        r'recruiting\s+for\s+([a-zA-Z\s,&.-]+?)(?:\n|\.)',
-        r'focus\s+on\s+([a-zA-Z\s,&.-]+?)\s+roles',
-        r'([a-zA-Z\s,&.-]+?)\s+recruitment',
-        r'hiring\s+([a-zA-Z\s,&.-]+?)\s+professionals'
-    ]
-    
-    industry_focus = []
-    for pattern in industry_focus_patterns:
-        matches = re.finditer(pattern, markdown_content, re.IGNORECASE)
-        for match in matches:
-            focus = match.group(1).strip()
-            if len(focus) > 3 and len(focus) < 50:
-                industry_focus.append(focus)
+                if spec.isdigit():
+                    years_experience = f"{spec}+ years"
+                else:
+                    specializations.append(spec)
     
     return {
         "recruiter_name": recruiter_name,
@@ -258,14 +327,15 @@ def parse_recruiter_profile_content(markdown_content: str, recruiter_url: str) -
         "location": location,
         "specializations": specializations[:3],  # Limit to top 3
         "years_experience": years_experience,
-        "education": education,
-        "industry_focus": industry_focus[:3],  # Limit to top 3
-        "source_url": recruiter_url
+        "education": "Check full profile",  # Authenticated users can get more details
+        "industry_focus": specializations[:2] if specializations else ["Recruitment"],
+        "source_url": recruiter_url,
+        "authentication_status": "Authenticated"
     }
 
 def fetch_recruiter_profile(recruiter_url: str, manual_recruiter_text: str = None) -> dict:
     """
-    Main function: try direct scraping first, then fall back to manual input
+    Main function: try authenticated scraping first, then fall back to manual input
     """
     
     # If manual text is provided, use that
@@ -282,21 +352,21 @@ def fetch_recruiter_profile(recruiter_url: str, manual_recruiter_text: str = Non
     if not is_valid_linkedin_profile_url(recruiter_url):
         return create_manual_recruiter_input_prompt(recruiter_url, "Invalid LinkedIn profile URL")
     
-    print(f"🎯 Attempting to scrape recruiter profile directly from URL")
+    print(f"🎯 Attempting to scrape recruiter profile with FULL authentication")
     
     try:
-        # Try direct URL scraping
+        # Try authenticated scraping with ALL cookies
         result = asyncio.run(scrape_linkedin_recruiter_profile(recruiter_url))
         
         if result.get("error"):
-            print(f"❌ Direct recruiter profile scraping failed: {result['error']}")
+            print(f"❌ Authenticated scraping failed: {result['error']}")
             return create_manual_recruiter_input_prompt(recruiter_url, result['error'])
         else:
-            print("✅ Direct recruiter profile scraping successful!")
+            print("✅ Authenticated scraping successful!")
             return result
             
     except Exception as e:
-        print(f"❌ Exception during direct recruiter profile scraping: {str(e)}")
+        print(f"❌ Exception during authenticated scraping: {str(e)}")
         return create_manual_recruiter_input_prompt(recruiter_url, str(e))
 
 def is_valid_linkedin_profile_url(url: str) -> bool:
@@ -320,7 +390,7 @@ def create_manual_recruiter_input_prompt(recruiter_url: str, error_message: str)
         "error": "MANUAL_INPUT_REQUIRED",
         "original_error": error_message,
         "instructions": {
-            "message": "Direct recruiter profile scraping failed. Please copy and paste the recruiter's profile information manually.",
+            "message": "Authenticated scraping failed. Please copy and paste the recruiter's profile information manually.",
             "steps": [
                 "1. Open the recruiter's LinkedIn profile in your browser",
                 "2. Copy their name, current position, background, and specializations",
@@ -330,6 +400,7 @@ def create_manual_recruiter_input_prompt(recruiter_url: str, error_message: str)
         }
     }
 
+# Include all the manual parsing functions from your original code
 def parse_manual_recruiter_text(recruiter_text: str, recruiter_url: str) -> dict:
     """Parse manually entered recruiter profile text"""
     return {
@@ -351,7 +422,6 @@ def extract_recruiter_name_from_text(text: str) -> str:
     for line in lines[:3]:
         line = line.strip()
         if line and len(line) > 2 and len(line) < 50:
-            # Remove common prefixes
             line = re.sub(r'^(Name:\s*|Recruiter:\s*)', '', line, flags=re.IGNORECASE)
             if line and not any(word in line.lower() for word in ['position', 'company', 'title', 'at ']):
                 return line
@@ -507,9 +577,11 @@ def format_recruiter_profile_as_markdown(recruiter_data: dict) -> str:
         specializations_str = ', '.join(metadata.get('specializations', [])) if metadata.get('specializations') else 'Not specified'
         industry_focus_str = ', '.join(metadata.get('industry_focus', [])) if metadata.get('industry_focus') else 'Not specified'
         
+        auth_status = "✅ Authenticated" if metadata.get('authentication_status') == 'Authenticated' else "⚠️ Public view"
+        
         structured_markdown = f"""# {metadata.get('recruiter_name', 'Recruiter Profile')}
 
-## Professional Details
+## Professional Details ({auth_status})
 **Current Position:** {metadata.get('current_position', 'Not specified')}
 **Company:** {metadata.get('current_company', 'Not specified')}
 **Location:** {metadata.get('location', 'Not specified')}
