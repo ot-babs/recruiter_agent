@@ -1,8 +1,9 @@
 """
-auto_scrape_improved.py – Robust LinkedIn profile scraper with JSON extraction
+auto_scrape_improved.py – Robust LinkedIn profile scraper with JSON extraction + LLM parsing
 ──────────────────────────────────────────────────────────────────────────────
 $ export LINKEDIN_EMAIL="you@example.com"
 $ export LINKEDIN_PASSWORD="••••••••"
+$ export OPENAI_API_KEY="sk-..."  # NEW: Add OpenAI API key
 $ python auto_scrape_improved.py
 
 # Run in headless mode (default):
@@ -13,7 +14,7 @@ $ export HEADLESS=false
 $ python auto_scrape_improved.py
 
 Dependencies:
-pip install crawl4ai playwright beautifulsoup4
+pip install crawl4ai playwright beautifulsoup4 langchain-openai
 """
 import os, json, asyncio, sys, time, re
 from pathlib import Path
@@ -38,15 +39,31 @@ try:
 except ImportError:
     BS4_AVAILABLE = False
 
+# NEW: Import LLM components for enhanced parsing
+try:
+    from langchain_openai import ChatOpenAI
+    from langchain.schema import SystemMessage, HumanMessage
+    LLM_AVAILABLE = True
+    print("✅  LLM parsing available")
+except ImportError:
+    LLM_AVAILABLE = False
+    print("⚠️  langchain-openai not installed, will use basic extraction only")
+
 PROFILE_URL  = "https://www.linkedin.com/in/otbabs/"
 STATE_FILE   = Path("linkedin_state.json")
 
 EMAIL = os.getenv("LINKEDIN_EMAIL")
 PWD   = os.getenv("LINKEDIN_PASSWORD")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # NEW: OpenAI API key
+
 if not (EMAIL and PWD):
     sys.exit("❌  Set LINKEDIN_EMAIL and LINKEDIN_PASSWORD env vars first.")
 
-# ───────────────────────── Enhanced helpers ─────────────────────────
+if not OPENAI_API_KEY and LLM_AVAILABLE:
+    print("⚠️  OPENAI_API_KEY not set, will use basic extraction only")
+    LLM_AVAILABLE = False
+
+# ───────────────────────── Enhanced helpers (keeping existing) ─────────────────────────
 async def save_state(ctx): 
     try:
         state = await ctx.storage_state()
@@ -274,7 +291,168 @@ async def scroll_page_slowly(page):
         # Close any popups that might appear
         await close_banners_enhanced(page)
 
-# ───────────────────────── Content extraction functions ─────────────────────────
+# ───────────────────────── NEW: LLM-based profile parsing ─────────────────────────
+def parse_linkedin_profile_with_llm(profile_markdown: str, model: str = "gpt-4o-mini") -> dict:
+    """
+    Enhanced profile parsing using LLM to extract detailed information
+    """
+    if not LLM_AVAILABLE:
+        return {"error": "LLM not available", "method": "llm_parsing_skipped"}
+    
+    try:
+        llm = ChatOpenAI(
+            openai_api_key=OPENAI_API_KEY,
+            model=model,
+            temperature=0
+        )
+        
+        system_prompt = """You are an expert LinkedIn profile analyzer. Extract comprehensive structured data from LinkedIn profiles. 
+        Always return valid JSON without markdown formatting. Focus on professional context and be thorough."""
+        
+        user_prompt = f"""
+Analyze this LinkedIn profile and extract the following fields in JSON format:
+
+BASIC INFO:
+- name (string): Full name
+- headline (string): Professional headline/title
+- current_position (string): Current job title
+- current_company (string): Current employer
+- location (string): Geographic location
+- profile_url (string): LinkedIn profile URL if visible
+
+EXPERIENCE & BACKGROUND:
+- years_experience (string): Total years of experience (estimate if needed)
+- previous_companies (list): List of previous employers
+- career_progression (string): Brief description of career trajectory
+- industry_focus (list): Industries they work in or have experience with
+- specializations (list): Areas of expertise, skills, or specializations
+
+EDUCATION & CREDENTIALS:
+- education (list): Educational background
+- certifications (list): Professional certifications or licenses
+- languages (list): Languages spoken if mentioned
+
+PROFESSIONAL DETAILS:
+- about_summary (string): About/summary section content
+- key_achievements (list): Notable accomplishments or metrics mentioned
+- leadership_roles (list): Management or leadership positions
+- company_size_experience (list): Types of companies worked at (startup, enterprise, etc.)
+
+PERSONAL INSIGHTS:
+- personality_traits (list): Professional characteristics inferred from content
+- communication_style (string): How they communicate (professional, casual, technical, etc.)
+- values_and_motivations (list): What seems to drive them professionally
+- networking_activity (string): How active they seem on LinkedIn
+
+RECRUITER-SPECIFIC (if applicable):
+- is_recruiter (boolean): Whether this person appears to be a recruiter
+- recruiting_focus (list): What types of roles they recruit for (if recruiter)
+- recruiting_approach (string): Their recruiting methodology (if recruiter)
+
+IMPORTANT: 
+- Return ONLY the JSON object, no markdown formatting, no code blocks, no extra text
+- If information is not available, use "Not specified" for strings and empty arrays [] for lists
+- Make reasonable inferences from available information
+- Extract implied information where reasonable
+- Focus on professional-relevant information
+
+LinkedIn profile content:
+----
+{profile_markdown}
+----
+"""
+
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt)
+        ]
+        
+        print("🤖  Analyzing profile with LLM...")
+        response = llm(messages)
+        content = response.content.strip()
+        
+        # Remove markdown code blocks if present
+        content = clean_json_response(content)
+        
+        # Parse and validate the JSON
+        parsed_data = json.loads(content)
+        parsed_data['extraction_method'] = 'llm_enhanced'
+        
+        return parsed_data
+        
+    except json.JSONDecodeError as e:
+        print(f"⚠️  LLM JSON parsing failed: {e}")
+        return {
+            "error": "failed to parse LLM JSON", 
+            "raw": content[:500] + "..." if len(content) > 500 else content,
+            "json_error": str(e),
+            "extraction_method": "llm_failed"
+        }
+    except Exception as e:
+        print(f"⚠️  LLM API call failed: {e}")
+        return {
+            "error": "LLM API call failed", 
+            "details": str(e),
+            "extraction_method": "llm_error"
+        }
+
+def clean_json_response(content: str) -> str:
+    """Clean JSON response by removing markdown code blocks and extra formatting"""
+    # Remove markdown code blocks
+    content = re.sub(r'```json\s*', '', content)
+    content = re.sub(r'```\s*', '', content)
+    
+    # Remove any leading/trailing whitespace
+    content = content.strip()
+    
+    # If content starts with text before JSON, try to extract JSON
+    json_match = re.search(r'\{.*\}', content, re.DOTALL)
+    if json_match:
+        content = json_match.group(0)
+    
+    return content
+
+def merge_extraction_results(basic_data: dict, llm_data: dict) -> dict:
+    """
+    Merge basic CSS extraction with LLM-enhanced data
+    LLM data takes precedence for overlapping fields
+    """
+    if llm_data.get('error'):
+        print(f"⚠️  Using basic extraction only: {llm_data.get('error')}")
+        basic_data['extraction_method'] = 'basic_only'
+        basic_data['llm_error'] = llm_data.get('error')
+        return basic_data
+    
+    # Start with LLM data as base (more comprehensive)
+    merged = llm_data.copy()
+    
+    # Fill in any missing basic fields from CSS extraction
+    basic_field_mapping = {
+        'name': 'name',
+        'headline': 'headline', 
+        'location': 'location',
+        'about': 'about_summary'
+    }
+    
+    for basic_field, llm_field in basic_field_mapping.items():
+        if basic_field in basic_data and basic_data[basic_field]:
+            # If LLM field is empty or "Not specified", use basic extraction
+            if not merged.get(llm_field) or merged.get(llm_field) == "Not specified":
+                merged[llm_field] = basic_data[basic_field]
+    
+    # Add basic extraction data for reference
+    merged['basic_extraction'] = {
+        'experience': basic_data.get('experience', []),
+        'education': basic_data.get('education', []), 
+        'skills': basic_data.get('skills', []),
+        'certifications': basic_data.get('certifications', [])
+    }
+    
+    merged['extraction_method'] = 'llm_enhanced_with_basic_fallback'
+    
+    return merged
+
+# ───────────────────────── Content extraction functions (keeping existing) ─────────────────────────
 # Updated schema format for crawl4ai 0.7.0
 LINKEDIN_EXTRACTION_SCHEMA = {
     "name": "LinkedIn Profile Extractor",
@@ -400,7 +578,7 @@ def parse_experience_item(text):
     return result
 
 async def extract_with_crawl4ai(html_content, url):
-    """Use crawl4ai to extract structured content - FIXED VERSION"""
+    """Use crawl4ai to extract structured content - ENHANCED VERSION"""
     if not CRAWL4AI_AVAILABLE:
         print("⚠️  Crawl4ai not available, using manual extraction")
         return manual_extraction_fallback(html_content)
@@ -408,6 +586,9 @@ async def extract_with_crawl4ai(html_content, url):
     try:
         async with AsyncWebCrawler(verbose=False) as crawler:
             # Try Method 1: JsonCssExtractionStrategy with corrected schema
+            basic_data = {}
+            markdown_content = ""
+            
             try:
                 extraction_strategy = JsonCssExtractionStrategy(
                     schema=LINKEDIN_EXTRACTION_SCHEMA,
@@ -425,16 +606,16 @@ async def extract_with_crawl4ai(html_content, url):
                 if result.success and result.extracted_content:
                     try:
                         raw_data = json.loads(result.extracted_content)
-                        return process_extracted_data(raw_data)
+                        basic_data = process_extracted_data(raw_data)
+                        print("✅  Basic CSS extraction successful")
                     except json.JSONDecodeError as e:
                         print(f"⚠️  JSON parsing failed: {e}")
-                        # Fall through to Method 2
             except Exception as e:
                 print(f"⚠️  JsonCssExtractionStrategy failed: {e}")
             
-            # Try Method 2: Use markdown conversion and manual parsing
+            # Try Method 2: Get markdown for LLM processing
             try:
-                print("🔄  Trying markdown conversion approach...")
+                print("🔄  Getting markdown content for LLM analysis...")
                 result = await crawler.arun(
                     url=f"raw://{html_content}",
                     config=CrawlerRunConfig(
@@ -445,16 +626,29 @@ async def extract_with_crawl4ai(html_content, url):
                 )
                 
                 if result.success and hasattr(result, 'markdown'):
-                    # Extract data from markdown
-                    markdown_text = result.markdown.raw_markdown if hasattr(result.markdown, 'raw_markdown') else str(result.markdown)
-                    return extract_from_markdown(markdown_text)
+                    markdown_content = result.markdown.raw_markdown if hasattr(result.markdown, 'raw_markdown') else str(result.markdown)
+                    print(f"✅  Markdown extraction successful ({len(markdown_content)} chars)")
                     
             except Exception as e:
                 print(f"⚠️  Markdown conversion failed: {e}")
             
-            # If both methods fail, use manual extraction
-            print("⚠️  All crawl4ai methods failed, falling back to manual parsing")
-            return manual_extraction_fallback(html_content)
+            # NEW: Enhanced LLM processing
+            if markdown_content and LLM_AVAILABLE:
+                print("🤖  Processing with LLM for enhanced extraction...")
+                llm_data = parse_linkedin_profile_with_llm(markdown_content)
+                
+                # Merge basic CSS data with LLM-enhanced data
+                if basic_data:
+                    return merge_extraction_results(basic_data, llm_data)
+                else:
+                    return llm_data
+            
+            elif basic_data:
+                print("✅  Using basic CSS extraction")
+                return basic_data
+            else:
+                print("⚠️  All extraction methods failed, falling back to manual parsing")
+                return manual_extraction_fallback(html_content)
                 
     except Exception as e:
         print(f"⚠️  Crawl4ai error: {e}, falling back to manual parsing")
@@ -847,8 +1041,8 @@ async def main():
             html = await page.content()
             print(f"     Raw HTML: {len(html):,} characters")
             
-            # Extract structured data
-            print("[6] 🔍  Processing with crawl4ai...")
+            # NEW: Enhanced extraction with LLM processing
+            print("[6] 🔍  Processing with enhanced extraction...")
             profile_data = await extract_with_crawl4ai(html, PROFILE_URL)
             
             # Add metadata
@@ -856,8 +1050,9 @@ async def main():
                 'profile_url': PROFILE_URL,
                 'scraped_at': datetime.now().isoformat(),
                 'html_length': len(html),
-                'extraction_tool': 'crawl4ai + playwright' if CRAWL4AI_AVAILABLE else 'manual + playwright',
-                'headless_mode': HEADLESS_MODE
+                'extraction_tool': 'crawl4ai + playwright + llm' if LLM_AVAILABLE else 'crawl4ai + playwright',
+                'headless_mode': HEADLESS_MODE,
+                'llm_available': LLM_AVAILABLE
             }
             
             # Save results
@@ -875,12 +1070,18 @@ async def main():
             print(f"    📄  JSON data: {json_file} ({json_file.stat().st_size:,} bytes)")
             print(f"    🌐  HTML backup: {html_file} ({html_file.stat().st_size:,} bytes)")
             print(f"    👤  Profile: {profile_data.get('name', 'Unknown')}")
-            if profile_data.get('headline'):
-                print(f"    💼  Headline: {profile_data['headline'][:60]}...")
-            if 'experience' in profile_data:
-                print(f"    🏢  Experience items: {len(profile_data['experience'])}")
-            if 'skills' in profile_data:
-                print(f"    🔧  Skills found: {len(profile_data['skills'])}")
+            if profile_data.get('headline') or profile_data.get('current_position'):
+                title = profile_data.get('headline') or profile_data.get('current_position')
+                print(f"    💼  Title: {title[:60]}...")
+            if profile_data.get('current_company'):
+                print(f"    🏢  Company: {profile_data['current_company']}")
+            if profile_data.get('specializations'):
+                print(f"    🔧  Specializations: {len(profile_data['specializations'])} found")
+            if profile_data.get('years_experience'):
+                print(f"    📈  Experience: {profile_data['years_experience']}")
+            if profile_data.get('is_recruiter'):
+                print(f"    🎯  Recruiter detected: {profile_data['is_recruiter']}")
+            print(f"    ⚙️   Extraction method: {profile_data.get('extraction_method', 'unknown')}")
             
         except Exception as e:
             print(f"💥  Script failed: {e}")
@@ -898,7 +1099,9 @@ async def main():
 
 if __name__ == "__main__":
     headless_status = "headless" if os.getenv("HEADLESS", "true").lower() == "true" else "visible"
-    extraction_method = "crawl4ai + manual fallback" if CRAWL4AI_AVAILABLE else "manual extraction only"
+    extraction_method = "crawl4ai + LLM enhanced" if CRAWL4AI_AVAILABLE and LLM_AVAILABLE else "basic extraction only"
     print(f"🚀  Starting enhanced LinkedIn scraper in {headless_status} mode...")
     print(f"📊  Extraction method: {extraction_method}")
+    if LLM_AVAILABLE:
+        print(f"🤖  LLM model: gpt-4o-mini")
     asyncio.run(main())
